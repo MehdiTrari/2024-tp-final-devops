@@ -13,6 +13,16 @@ services:
       db:
         condition: service_healthy
 
+  web-client: 
+    build: 
+      context: ./web-client
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - api
+
   db:
     image: postgres:15-alpine
     environment:
