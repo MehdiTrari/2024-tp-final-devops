@@ -1,0 +1,30 @@
+version: "3.3"
+
+services:
+  database:
+    image: postgres:15
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: vote_user
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: vote_db
+
+  vote-api:
+    build:
+      context: ./vote-api
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./vote-api/.env
+    depends_on:
+      - database
+
+  web-client:
+    build:
+      context: ./web-client
+    environment:
+      - VOTE_API_BASE_URL=http://vote-api:8080
+    ports:
+      - "3000:3000"

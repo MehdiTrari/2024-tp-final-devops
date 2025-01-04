@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	PgUrlEnvVar          = "PG_URL"
+	PgUrlEnvVar          = "postgres://vote_user:password123@database:5432/vote_db"
 	CreateVoteTableQuery = `
 		CREATE TABLE IF NOT EXISTS votes (
 		    vote_id SERIAL PRIMARY KEY,
