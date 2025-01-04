@@ -1,5 +1,5 @@
 # docker-compose.yml
-version: '3.3'
+version: '3.8'
 
 services:
   api:
@@ -19,10 +19,14 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - VOTE_API_BASE_URL=http://api:8080
     depends_on:
       - api
-
+  docs:
+        build:
+          context: ./docs
+        ports:
+          - "4000:80"
   db:
     image: postgres:15-alpine
     environment:

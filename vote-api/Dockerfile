@@ -1,4 +1,3 @@
-bash 
 FROM golang:1.23-rc-alpine
 WORKDIR /app
 RUN apk add --no-cache postgresql-client
