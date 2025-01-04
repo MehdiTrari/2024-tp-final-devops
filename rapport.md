@@ -1,18 +1,22 @@
 # Rapport de Déploiement avec Docker et Docker Compose
 
 ## Introduction
-Dans ce projet, j'ai configuré et déployé une application composée de plusieurs services (`vote-api`, `web-client`, une base de données PostgreSQL et la documentation basée sur Docusaurus) en utilisant Docker et Docker Compose. J'ai créé des Dockerfiles spécifiques pour chaque service et utilisé un fichier `docker-compose.yml` pour orchestrer leur interaction.
+Dans ce projet, j'ai configuré et déployé une application multi-services composée de :
+- Une API (`vote-api`),
+- Une interface utilisateur (`web-client`),
+- Une documentation statique (`docs`),
+- Une base de données PostgreSQL (`db`).
+
+J'ai utilisé Docker pour créer des images pour chaque service et Docker Compose pour orchestrer leur déploiement et faciliter leur exécution simultanée.
 
 ---
 
 ## Configuration avec Docker Compose
 
-Le fichier `docker-compose.yml` a été indispensable pour faire fonctionner l'application, car il m'a permis de gérer les dépendances entre les services et de les exécuter simultanément de manière cohérente.
-
-### Structure du `docker-compose.yml`
+Voici le fichier `docker-compose.yml` utilisé pour orchestrer les services :
 
 ```yaml
-version: '3.3'
+version: '3.8'
 
 services:
   api:
@@ -32,12 +36,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - VOTE_API_BASE_URL=http://api:8080
     depends_on:
       - api
 
   docs:
-    build: ./docs
+    build:
+      context: ./docs
     ports:
       - "4000:80"
 
@@ -64,56 +69,30 @@ volumes:
 ### Explications
 
 1. **Service `api`** :
-   - J'ai configuré l'API `vote-api` pour qu'elle soit construite avec le Dockerfile situé dans le répertoire `vote-api`.
-   - Le service est exposé sur le port `8080` et utilise une variable d'environnement `PG_URL` pour se connecter à la base de données.
+   - Construit à partir du Dockerfile dans `vote-api`.
+   - Exposé sur le port `8080`.
+   - Connecté à PostgreSQL via la variable d'environnement `PG_URL`.
+   - Dépend de la base de données (`db`) et attend qu'elle soit prête avant de démarrer grâce à `depends_on`.
 
 2. **Service `web-client`** :
-   - J'ai configuré le client web pour qu'il soit construit avec le Dockerfile du répertoire `web-client`.
-   - Le service est exposé sur le port `3000` et la variable `NEXT_PUBLIC_API_URL` est définie pour pointer vers l'API.
+   - Construit à partir du Dockerfile dans `web-client`.
+   - Exposé sur le port `3000`.
+   - Communique avec l'API via la variable `VOTE_API_BASE_URL`.
 
 3. **Service `docs`** :
-   - J'ai intégré la documentation Docusaurus en utilisant le Dockerfile du répertoire `docs`.
-   - Le service est exposé sur le port `4000`.
+   - Construit à partir du Dockerfile dans `docs`.
+   - Exposé sur le port `4000` pour servir la documentation statique.
 
 4. **Service `db`** :
-   - J'ai utilisé l'image officielle `postgres:15-alpine` pour la base de données.
-   - Les variables d'environnement (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`) permettent de configurer l'utilisateur, le mot de passe et le nom de la base de données.
-   - J'ai ajouté un **healthcheck** pour m'assurer que PostgreSQL est prêt avant que les autres services ne s'y connectent.
-
-5. **Volumes** :
-   - Le volume `postgres_data` est utilisé pour persister les données de la base de données.
+   - Utilise l'image officielle `postgres:15-alpine`.
+   - Configuré avec des variables d'environnement pour l'utilisateur, le mot de passe et le nom de la base de données.
+   - Utilise un volume nommé `postgres_data` pour persister les données.
 
 ---
 
-## Dockerfile pour `vote-api`
+## Dockerfile des Services
 
-```dockerfile
-FROM golang:1.23-rc-alpine
-WORKDIR /app
-RUN apk add --no-cache postgresql-client
-COPY go.mod ./
-COPY go.sum ./
-
-RUN go mod download
-COPY . .
-RUN go build -o main .
-EXPOSE 8080
-
-CMD ["./main"]
-```
-
-### Explications
-
-1. **Base de l'image** : 
-   - J'ai utilisé l'image `golang:1.23-rc-alpine` pour réduire la taille finale de l'image.
-2. **Installation des dépendances** :
-   - Les fichiers `go.mod` et `go.sum` sont copiés, puis les dépendances sont téléchargées avec `go mod download`.
-3. **Construction de l'application** :
-   - J'ai compilé l'application en un exécutable nommé `main`.
-
----
-
-## Dockerfile pour `web-client`
+### Dockerfile pour `web-client`
 
 ```dockerfile
 # Étape 1 : Build de l'application
@@ -146,15 +125,24 @@ EXPOSE 3000
 CMD ["yarn", "start"]
 ```
 
-### Explications
+### Dockerfile pour `api`
 
-1. **Construction en deux étapes** :
-   - La première étape compile le projet avec `yarn build`.
-   - La deuxième étape utilise une image plus légère (`node:18-slim`) pour exécuter le projet.
+```dockerfile
+FROM golang:1.23-rc-alpine
+WORKDIR /app
+RUN apk add --no-cache postgresql-client
+COPY go.mod ./
+COPY go.sum ./
 
----
+RUN go mod download
+COPY . .
+RUN go build -o main .
+EXPOSE 8080
 
-## Dockerfile pour `docs`
+CMD ["./main"]
+```
+
+### Dockerfile pour `docs`
 
 ```dockerfile
 # Étape 1 : Build de la documentation
@@ -164,41 +152,57 @@ WORKDIR /app
 # Copier les fichiers de configuration
 COPY package.json yarn.lock ./
 
+# Installer les dépendances nécessaires
 RUN yarn install
 
 # Copier le reste du code
 COPY . ./
 
+# Construire la documentation
 RUN yarn build
 
 # Étape 2 : Image pour servir la documentation
 FROM nginx:alpine
 WORKDIR /usr/share/nginx/html
 
+# Copier la documentation générée dans l'image finale
 COPY --from=builder /app/build .
 
+# Exposer le port 80
 EXPOSE 80
 
+# Commande de démarrage
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
-### Explications
-
-1. **Étape 1 : Construction** :
-   - J'ai utilisé `node:18` pour installer les dépendances et construire la documentation avec `yarn build`.
-2. **Étape 2 : Servir la documentation** :
-   - J'ai utilisé l'image `nginx:alpine` pour servir les fichiers statiques générés.
-
 ---
 
-## Pourquoi Docker Compose était indispensable
-Docker Compose était indispensable pour :
-- Gérer les dépendances entre les services.
-- Synchroniser le démarrage des conteneurs avec `depends_on` et les **healthchecks**.
-- Simplifier l'exécution locale des services avec une seule commande : `docker-compose up`.
+## Instructions pour exécuter le projet
+
+1. Assurez-vous d'avoir Docker et Docker Compose installés sur votre machine.
+2. Clonez le projet :
+   ```bash
+   git clone <repository_url>
+   cd <repository_folder>
+   ```
+3. Lancez tous les services avec Docker Compose :
+   ```bash
+   docker-compose up --build
+   ```
+   Cette commande construit les images et démarre tous les services.
+
+4. Une fois démarré, accédez aux services via les ports exposés :
+   - **API** : [http://localhost:8080](http://localhost:8080)
+   - **Interface utilisateur** : [http://localhost:3000](http://localhost:3000)
+   - **Documentation** : [http://localhost:4000](http://localhost:4000)
+
+5. Pour arrêter les services :
+   ```bash
+   docker-compose down
+   ```
 
 ---
 
 ## Conclusion
-J'ai configuré une application multi-services en utilisant Docker et Docker Compose. Le projet est maintenant prêt à être utilisé dans différents environnements, notamment en production une fois déployé.
+Ce projet est maintenant entièrement conteneurisé et peut être exécuté facilement avec Docker Compose. Chaque service est isolé, mais ils interagissent grâce à la configuration centralisée. Les fichiers Docker et Docker Compose simplifient la gestion des dépendances et assurent la portabilité du projet.
 ```
