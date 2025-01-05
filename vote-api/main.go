@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/Anthony-Jhoiro/devops-tp-final/vote-api/movies"
-	"github.com/Anthony-Jhoiro/devops-tp-final/vote-api/vote"
 	"log/slog"
 	"net/http"
 	"os"
+
+	"github.com/Anthony-Jhoiro/devops-tp-final/vote-api/movies"
+	"github.com/Anthony-Jhoiro/devops-tp-final/vote-api/vote"
 )
 
 const (

@@ -2,13 +2,14 @@ package vote
 
 import (
 	"database/sql"
-	_ "github.com/lib/pq"
 	"log/slog"
 	"os"
+
+	_ "github.com/lib/pq"
 )
 
 const (
-	PgUrlEnvVar          = "postgres://vote_user:password123@database:5432/vote_db"
+	PgUrlEnvVar          = "PG_URL"
 	CreateVoteTableQuery = `
 		CREATE TABLE IF NOT EXISTS votes (
 		    vote_id SERIAL PRIMARY KEY,
