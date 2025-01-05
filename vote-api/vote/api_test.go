@@ -8,6 +8,8 @@ import (
 )
 
 func TestHandlePost(t *testing.T) {
+	cleanDb() // Nettoyer la base avant le test
+
 	// Préparez une requête POST
 	body := `{"imdbId":"tt1234567", "voteType":"like"}`
 	req := httptest.NewRequest(http.MethodPost, "/votes", strings.NewReader(body))
@@ -26,14 +28,10 @@ func TestHandlePost(t *testing.T) {
 }
 
 func TestHandleGet(t *testing.T) {
-	// Préparez une base de données en mémoire ou mockée
-	err := SetupDb()
-	if err != nil {
-		t.Fatalf("Failed to set up database: %v", err)
-	}
+	cleanDb() // Nettoyer la base avant le test
 
 	// Insérez un vote pour tester
-	err = InsertVote(Vote{ImdbId: "tt1234567", VoteType: "like"})
+	err := InsertVote(Vote{ImdbId: "tt1234567", VoteType: "like"})
 	if err != nil {
 		t.Fatalf("Failed to insert vote: %v", err)
 	}

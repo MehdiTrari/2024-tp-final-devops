@@ -4,12 +4,21 @@ import (
 	"testing"
 )
 
-func TestInsertVote(t *testing.T) {
-	// Préparez une base de données en mémoire ou mockée (utilisez une vraie DB pour des tests locaux si nécessaire)
-	err := SetupDb()
+func cleanDb() {
+	db, err := createDbConnection()
 	if err != nil {
-		t.Fatalf("Failed to set up database: %v", err)
+		panic("Failed to connect to the database for cleanup: " + err.Error())
 	}
+	defer db.Close()
+
+	_, err = db.Exec("DELETE FROM votes")
+	if err != nil {
+		panic("Failed to clean up the database: " + err.Error())
+	}
+}
+
+func TestInsertVote(t *testing.T) {
+	cleanDb() // Nettoyer la base avant le test
 
 	// Données de test
 	vote := Vote{
@@ -18,7 +27,7 @@ func TestInsertVote(t *testing.T) {
 	}
 
 	// Action
-	err = InsertVote(vote)
+	err := InsertVote(vote)
 
 	// Assertions
 	if err != nil {
@@ -27,14 +36,10 @@ func TestInsertVote(t *testing.T) {
 }
 
 func TestGetVoteByMovieId(t *testing.T) {
-	// Préparez une base de données en mémoire ou mockée
-	err := SetupDb()
-	if err != nil {
-		t.Fatalf("Failed to set up database: %v", err)
-	}
+	cleanDb() // Nettoyer la base avant le test
 
 	// Insérez un vote
-	err = InsertVote(Vote{ImdbId: "tt1234567", VoteType: "like"})
+	err := InsertVote(Vote{ImdbId: "tt1234567", VoteType: "like"})
 	if err != nil {
 		t.Fatalf("InsertVote() failed: %v", err)
 	}
