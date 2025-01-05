@@ -5,17 +5,16 @@ on:
     branches:
       - main
       - develop
-      - feature/pipelineTest
+      - feature/*
   pull_request:
     branches:
       - main
       - develop
-      - feature/pipelineTest
+      - feature/*
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:13
@@ -86,3 +85,23 @@ jobs:
       - name: Run WebClient Unit Tests
         working-directory: web-client
         run: yarn test
+
+  build-artifacts:
+    runs-on: ubuntu-latest
+    needs:
+      - webclient-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies and build
+        working-directory: web-client
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: web-client-build
+          path: web-client/.next

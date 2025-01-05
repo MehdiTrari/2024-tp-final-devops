@@ -17,9 +17,14 @@ Je travaille avec la méthode agile, ce qui implique une organisation stricte de
 - **Branche `main`** : Contient la version stable de l'application, prête à être déployée en production.
 - **Branche `develop`** : Utilisée pour regrouper toutes les fonctionnalités en cours de développement avant leur validation finale.
 - **Branches `feature/*`** : Créées à partir de `develop` pour chaque nouvelle fonctionnalité ou tâche. Une fois le travail terminé, elles sont fusionnées dans `develop`.
-- **Hotfixes** : Si je devais travailler dans un environnement réel, les corrections urgentes (`hotfix`) seraient créées directement depuis `main` pour résoudre des bugs critiques.
+- **Hotfixes** : Les corrections urgentes (`hotfix`) sont créées directement depuis `main` pour résoudre des bugs critiques.
 
-Ce workflow permet une gestion fluide et cohérente des versions tout en maintenant la stabilité de la branche principale.
+### Validation des Pull Requests
+J'ai configuré GitHub pour :
+- Exiger une validation automatique par les tests CI avant la fusion des PR.
+- Empêcher la fusion si des tests échouent ou si la branche n'a pas été approuvée par un relecteur.
+
+Cette configuration assure une gestion fluide et cohérente des versions tout en maintenant la stabilité de la branche principale.
 
 ---
 
@@ -35,17 +40,16 @@ on:
     branches:
       - main
       - develop
-      - feature/pipelineTest
+      - feature/*
   pull_request:
     branches:
       - main
       - develop
-      - feature/pipelineTest
+      - feature/*
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:13
@@ -116,6 +120,26 @@ jobs:
       - name: Run WebClient Unit Tests
         working-directory: web-client
         run: yarn test
+
+  build-artifacts:
+    runs-on: ubuntu-latest
+    needs:
+      - webclient-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies and build
+        working-directory: web-client
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: web-client-build
+          path: web-client/.next
 ```
 
 ---
@@ -124,38 +148,39 @@ jobs:
 
 #### 1. **Déclencheurs**
 La pipeline est déclenchée automatiquement sur les événements suivants :
-- **Push** : Lorsqu'un commit est poussé sur les branches `main`, `develop`, ou toute branche commençant par `feature/`.
+- **Push** : Lorsqu'un commit est poussé sur les branches `main`, `develop`, ou toute branche `feature/*`.
 - **Pull Request** : Lorsqu'une pull request est ouverte ou mise à jour sur les mêmes branches.
 
 #### 2. **Job `build`**
-- **Objectif** : Tester l'API (`vote-api`) en exécutant les tests unitaires écrits en Go.
+- **Objectif** : Tester l'API `vote-api` en exécutant les tests unitaires écrits en Go.
 - **Configuration** :
-  - Utilisation d'un conteneur PostgreSQL comme service pour simuler une base de données.
-  - Configuration des variables d'environnement pour connecter l'API à la base de données.
-  - Installation des dépendances Go et exécution des tests avec `go test`.
+  - Utilisation d'un conteneur PostgreSQL simulé comme base de données.
+  - Installation des dépendances Go.
+  - Exécution des tests avec `go test`.
 
 #### 3. **Job `webclient-tests`**
-- **Objectif** : Tester le client web (`web-client`) en exécutant les tests unitaires et les tests E2E (End-to-End).
+- **Objectif** : Tester le client web (`web-client`) en exécutant les tests unitaires et les tests E2E.
 - **Configuration** :
   - Installation de Node.js et des dépendances via Yarn.
-  - Installation des navigateurs nécessaires pour Playwright (outil de test E2E).
+  - Installation des navigateurs nécessaires pour Playwright.
   - Exécution des tests unitaires avec `yarn test`.
-  - Exécution des tests E2E avec Playwright.
+
+#### 4. **Job `build-artifacts`**
+- **Objectif** : Générer les artefacts de build pour le déploiement.
+- **Configuration** :
+  - Compilation du client web avec `yarn build`.
+  - Téléchargement des artefacts pour utilisation ultérieure.
 
 ---
 
-## Résultats
-
-### Tests Unitaires
-- Les tests unitaires pour l'API et le client web valident que les fonctionnalités individuelles fonctionnent correctement.
-- Ces tests sont rapides à exécuter et constituent la première ligne de défense contre les régressions.
-
-### Tests E2E
-- Les tests E2E valident que les différents composants du système interagissent correctement.
-- Grâce à Playwright, les scénarios utilisateurs sont simulés pour garantir une expérience utilisateur fluide.
+## Rollback
+Pour ce projet, j'ai choisi de gérer les rollbacks avec des **tags Git**. Cette méthode me permet :
+1. D'identifier rapidement une version stable.
+2. De déployer une version précédente en cas de problème, simplement en basculant vers le commit associé au tag.
+3. D'assurer un suivi clair des versions, ce qui facilite la gestion de la production.
 
 ---
 
-## Conclusion
+## Résultats et Conclusion
 
-Cette configuration permet d'automatiser la validation du code, de détecter rapidement les régressions, et d'assurer un haut niveau de qualité pour le projet. Grâce à l'approche agile et à la séparation des branches, le workflow est à la fois flexible et robuste, facilitant la collaboration et le déploiement continu.
+Cette configuration garantit une validation continue du code et une gestion efficace des branches et des versions. La robustesse de la pipeline CI et la gestion agile des branches offrent une base solide pour le développement collaboratif et le déploiement fiable.
