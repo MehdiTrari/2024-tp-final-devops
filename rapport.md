@@ -1,4 +1,4 @@
-# Rapport de Déploiement avec Docker et Docker Compose
+# Rapport de Déploiement avec Docker, Docker Compose et Intégration Continue
 
 ## Introduction
 Dans ce projet, j'ai configuré et déployé une application multi-services composée de :
@@ -7,202 +7,155 @@ Dans ce projet, j'ai configuré et déployé une application multi-services comp
 - Une documentation statique (`docs`),
 - Une base de données PostgreSQL (`db`).
 
-J'ai utilisé Docker pour créer des images pour chaque service et Docker Compose pour orchestrer leur déploiement et faciliter leur exécution simultanée.
+J'ai utilisé Docker pour conteneuriser chaque service, Docker Compose pour orchestrer leur déploiement, et une pipeline d'intégration continue (CI) pour automatiser les tests et la validation du code.
 
 ---
 
-## Configuration avec Docker Compose
+## Méthode de Développement Agile et Gestion des Branches
 
-Voici le fichier `docker-compose.yml` utilisé pour orchestrer les services :
+Je travaille avec la méthode agile, ce qui implique une organisation stricte des branches pour faciliter le développement collaboratif :
+- **Branche `main`** : Contient la version stable de l'application, prête à être déployée en production.
+- **Branche `develop`** : Utilisée pour regrouper toutes les fonctionnalités en cours de développement avant leur validation finale.
+- **Branches `feature/*`** : Créées à partir de `develop` pour chaque nouvelle fonctionnalité ou tâche. Une fois le travail terminé, elles sont fusionnées dans `develop`.
+- **Hotfixes** : Si je devais travailler dans un environnement réel, les corrections urgentes (`hotfix`) seraient créées directement depuis `main` pour résoudre des bugs critiques.
+
+Ce workflow permet une gestion fluide et cohérente des versions tout en maintenant la stabilité de la branche principale.
+
+---
+
+## Intégration Continue avec GitHub Actions
+
+### Fichier `test.yml`
 
 ```yaml
-version: '3.8'
+name: CI Pipeline
 
-services:
-  api:
-    build: ./vote-api
-    ports:
-      - "8080:8080"
-    environment:
-      - PG_URL=postgres://vote_user:password123@db:5432/vote_db?sslmode=disable
-      - JSON_LOG=true
-    depends_on:
-      db:
-        condition: service_healthy
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature/pipelineTest
+  pull_request:
+    branches:
+      - main
+      - develop
+      - feature/pipelineTest
 
-  web-client: 
-    build: 
-      context: ./web-client
-    ports:
-      - "3000:3000"
-    environment:
-      - VOTE_API_BASE_URL=http://api:8080
-    depends_on:
-      - api
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-  docs:
-    build:
-      context: ./docs
-    ports:
-      - "4000:80"
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U user -d testdb"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=vote_user
-      - POSTGRES_PASSWORD=password123
-      - POSTGRES_DB=vote_db
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vote_user -d vote_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-volumes:
-  postgres_data:
-```
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21
 
-### Explications
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in {1..10}; do
+            nc -z localhost 5432 && echo "Postgres is ready" && exit 0
+            echo "Waiting for Postgres..."
+            sleep 3
+          done
+          echo "Postgres failed to start" && exit 1
 
-1. **Service `api`** :
-   - Construit à partir du Dockerfile dans `vote-api`.
-   - Exposé sur le port `8080`.
-   - Connecté à PostgreSQL via la variable d'environnement `PG_URL`.
-   - Dépend de la base de données (`db`) et attend qu'elle soit prête avant de démarrer grâce à `depends_on`.
+      - name: Set environment variables
+        env:
+          PG_URL: ${{ secrets.PG_URL }}
+        run: echo "PG_URL=${{ secrets.PG_URL }}" >> $GITHUB_ENV
 
-2. **Service `web-client`** :
-   - Construit à partir du Dockerfile dans `web-client`.
-   - Exposé sur le port `3000`.
-   - Communique avec l'API via la variable `VOTE_API_BASE_URL`.
+      - name: Install dependencies (vote-api)
+        working-directory: vote-api
+        run: go mod tidy
 
-3. **Service `docs`** :
-   - Construit à partir du Dockerfile dans `docs`.
-   - Exposé sur le port `4000` pour servir la documentation statique.
+      - name: Run Go tests
+        working-directory: vote-api
+        run: go test ./... -v
 
-4. **Service `db`** :
-   - Utilise l'image officielle `postgres:15-alpine`.
-   - Configuré avec des variables d'environnement pour l'utilisateur, le mot de passe et le nom de la base de données.
-   - Utilise un volume nommé `postgres_data` pour persister les données.
+  webclient-tests:
+    runs-on: ubuntu-latest
 
----
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-## Dockerfile des Services
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'yarn'
 
-### Dockerfile pour `web-client`
+      - name: Install dependencies
+        working-directory: web-client
+        run: yarn install --frozen-lockfile
 
-```dockerfile
-# Étape 1 : Build de l'application
-FROM node:18 as builder
-WORKDIR /app
+      - name: Install Playwright Browsers
+        working-directory: web-client
+        run: npx playwright install --with-deps
 
-# Copier les fichiers de configuration
-COPY package.json yarn.lock ./
-RUN yarn install
-
-# Copier le reste du code
-COPY . ./
-RUN yarn build
-
-# Étape 2 : Image pour l'exécution
-FROM node:18-slim
-WORKDIR /app
-
-# Copier les fichiers nécessaires pour l'exécution
-COPY --from=builder /app/package.json /app/yarn.lock ./
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-
-RUN yarn install --production
-
-# Exposer le port
-EXPOSE 3000
-
-# Commande de démarrage
-CMD ["yarn", "start"]
-```
-
-### Dockerfile pour `api`
-
-```dockerfile
-FROM golang:1.23-rc-alpine
-WORKDIR /app
-RUN apk add --no-cache postgresql-client
-COPY go.mod ./
-COPY go.sum ./
-
-RUN go mod download
-COPY . .
-RUN go build -o main .
-EXPOSE 8080
-
-CMD ["./main"]
-```
-
-### Dockerfile pour `docs`
-
-```dockerfile
-# Étape 1 : Build de la documentation
-FROM node:18 as builder
-WORKDIR /app
-
-# Copier les fichiers de configuration
-COPY package.json yarn.lock ./
-
-# Installer les dépendances nécessaires
-RUN yarn install
-
-# Copier le reste du code
-COPY . ./
-
-# Construire la documentation
-RUN yarn build
-
-# Étape 2 : Image pour servir la documentation
-FROM nginx:alpine
-WORKDIR /usr/share/nginx/html
-
-# Copier la documentation générée dans l'image finale
-COPY --from=builder /app/build .
-
-# Exposer le port 80
-EXPOSE 80
-
-# Commande de démarrage
-CMD ["nginx", "-g", "daemon off;"]
+      - name: Run WebClient Unit Tests
+        working-directory: web-client
+        run: yarn test
 ```
 
 ---
 
-## Instructions pour exécuter le projet
+### Explications de la Pipeline CI
 
-1. Assurez-vous d'avoir Docker et Docker Compose installés sur votre machine.
-2. Clonez le projet :
-   ```bash
-   git clone <repository_url>
-   cd <repository_folder>
-   ```
-3. Lancez tous les services avec Docker Compose :
-   ```bash
-   docker-compose up --build
-   ```
-   Cette commande construit les images et démarre tous les services.
+#### 1. **Déclencheurs**
+La pipeline est déclenchée automatiquement sur les événements suivants :
+- **Push** : Lorsqu'un commit est poussé sur les branches `main`, `develop`, ou toute branche commençant par `feature/`.
+- **Pull Request** : Lorsqu'une pull request est ouverte ou mise à jour sur les mêmes branches.
 
-4. Une fois démarré, accédez aux services via les ports exposés :
-   - **API** : [http://localhost:8080](http://localhost:8080)
-   - **Interface utilisateur** : [http://localhost:3000](http://localhost:3000)
-   - **Documentation** : [http://localhost:4000](http://localhost:4000)
+#### 2. **Job `build`**
+- **Objectif** : Tester l'API (`vote-api`) en exécutant les tests unitaires écrits en Go.
+- **Configuration** :
+  - Utilisation d'un conteneur PostgreSQL comme service pour simuler une base de données.
+  - Configuration des variables d'environnement pour connecter l'API à la base de données.
+  - Installation des dépendances Go et exécution des tests avec `go test`.
 
-5. Pour arrêter les services :
-   ```bash
-   docker-compose down
-   ```
+#### 3. **Job `webclient-tests`**
+- **Objectif** : Tester le client web (`web-client`) en exécutant les tests unitaires et les tests E2E (End-to-End).
+- **Configuration** :
+  - Installation de Node.js et des dépendances via Yarn.
+  - Installation des navigateurs nécessaires pour Playwright (outil de test E2E).
+  - Exécution des tests unitaires avec `yarn test`.
+  - Exécution des tests E2E avec Playwright.
+
+---
+
+## Résultats
+
+### Tests Unitaires
+- Les tests unitaires pour l'API et le client web valident que les fonctionnalités individuelles fonctionnent correctement.
+- Ces tests sont rapides à exécuter et constituent la première ligne de défense contre les régressions.
+
+### Tests E2E
+- Les tests E2E valident que les différents composants du système interagissent correctement.
+- Grâce à Playwright, les scénarios utilisateurs sont simulés pour garantir une expérience utilisateur fluide.
 
 ---
 
 ## Conclusion
-Ce projet est maintenant entièrement conteneurisé et peut être exécuté facilement avec Docker Compose. Chaque service est isolé, mais ils interagissent grâce à la configuration centralisée. Les fichiers Docker et Docker Compose simplifient la gestion des dépendances et assurent la portabilité du projet.
-```
+
+Cette configuration permet d'automatiser la validation du code, de détecter rapidement les régressions, et d'assurer un haut niveau de qualité pour le projet. Grâce à l'approche agile et à la séparation des branches, le workflow est à la fois flexible et robuste, facilitant la collaboration et le déploiement continu.
