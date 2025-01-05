@@ -5,15 +5,14 @@ import (
 	"testing"
 )
 
-func InitializeTestDatabase() {
+func TestSetupDb(t *testing.T) {
 	err := SetupDb()
 	if err != nil {
-		panic("Failed to set up database for tests: " + err.Error())
+		t.Fatalf("SetupDb failed: %v", err)
 	}
 }
 
 func TestMain(m *testing.M) {
-	// Initialiser la base de données pour les tests
 	err := SetupDb()
 	if err != nil {
 		panic("Failed to set up database for tests: " + err.Error())
