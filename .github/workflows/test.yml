@@ -1,4 +1,4 @@
-name: Go CI
+name: CI Pipeline
 
 on:
   push:
@@ -54,10 +54,35 @@ jobs:
           PG_URL: ${{ secrets.PG_URL }}
         run: echo "PG_URL=${{ secrets.PG_URL }}" >> $GITHUB_ENV
 
-      - name: Install dependencies
+      - name: Install dependencies (vote-api)
         working-directory: vote-api
         run: go mod tidy
 
-      - name: Run tests
+      - name: Run Go tests
         working-directory: vote-api
         run: go test ./... -v
+
+  webclient-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        working-directory: web-client
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright Browsers
+        working-directory: web-client
+        run: npx playwright install --with-deps
+
+      - name: Run WebClient Unit Tests
+        working-directory: web-client
+        run: yarn test
