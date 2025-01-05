@@ -1,4 +1,4 @@
-# Rapport de Déploiement avec Docker et Docker Compose
+# Rapport de Déploiement avec Docker, Docker Compose et Intégration Continue
 
 ## Introduction
 Dans ce projet, j'ai configuré et déployé une application multi-services composée de :
@@ -7,286 +7,180 @@ Dans ce projet, j'ai configuré et déployé une application multi-services comp
 - Une documentation statique (`docs`),
 - Une base de données PostgreSQL (`db`).
 
-J'ai utilisé Docker pour créer des images pour chaque service et Docker Compose pour orchestrer leur déploiement et faciliter leur exécution simultanée.
+J'ai utilisé Docker pour conteneuriser chaque service, Docker Compose pour orchestrer leur déploiement, et une pipeline d'intégration continue (CI) pour automatiser les tests et la validation du code.
 
 ---
 
-## Configuration avec Docker Compose
+## Méthode de Développement Agile et Gestion des Branches
 
-<<<<<<< Updated upstream
-Voici le fichier `docker-compose.yml` utilisé pour orchestrer les services :
-=======
 Je travaille avec la méthode agile, ce qui implique une organisation stricte des branches pour faciliter le développement collaboratif :
 - **Branche `main`** : Contient la version stable de l'application, prête à être déployée en production.
 - **Branche `develop`** : Utilisée pour regrouper toutes les fonctionnalités en cours de développement avant leur validation finale.
 - **Branches `feature/*`** : Créées à partir de `develop` pour chaque nouvelle fonctionnalité ou tâche. Une fois le travail terminé, elles sont fusionnées dans `develop`.
-- **Hotfixes** : Les corrections urgentes (`hotfix`) sont créées directement depuis `main` pour résoudre des bugs critiques en production.
+- **Hotfixes** : Les corrections urgentes (`hotfix`) sont créées directement depuis `main` pour résoudre des bugs critiques.
 
-Ce workflow permet une gestion fluide et cohérente des versions tout en maintenant la stabilité de la branche principale.
+### Validation des Pull Requests
+J'ai configuré GitHub pour :
+- Exiger une validation automatique par les tests CI avant la fusion des PR.
+- Empêcher la fusion si des tests échouent ou si la branche n'a pas été approuvée par un relecteur.
 
----
-
-## Rollbacks
-
-Pour mon projet, j'ai choisi une approche basée sur les **tags Docker** pour effectuer des rollbacks. Cette méthode présente plusieurs avantages dans le cadre d'un projet conteneurisé et déployé via Docker Compose :
-- Les images Docker taguées permettent de revenir rapidement à une version stable et validée.
-- Les tags facilitent la gestion des versions en production, surtout en cas de problème critique.
-
-### Méthode Utilisée : Rollback avec un Tag Docker
-
-1. **Création d'un Tag lors d'une Version Stable :**
-   À chaque version validée, je crée un tag Docker correspondant, par exemple `v1.0.0`. Cela garantit que je peux toujours revenir à cette version en cas de problème avec les déploiements futurs.
-
-   ```bash
-   docker tag vote-api:latest vote-api:v1.0.0
-   docker push vote-api:v1.0.0
-   ```
-
-2. **Rollback en Cas de Problème :**
-   Si une nouvelle version introduit un bug critique, je peux effectuer un rollback en utilisant directement l'image Docker taguée.
-
-   Exemple avec Docker Compose :
-   ```bash
-   docker-compose down
-   docker-compose pull vote-api:v1.0.0
-   docker-compose up -d vote-api
-   ```
-
-   Cette méthode remet instantanément en ligne la version stable précédemment taguée sans avoir à reconstruire l'image ou à modifier le code source.
-
-3. **Automatisation dans le Pipeline CI/CD :**
-   Dans le cadre d'une intégration continue, j'aurais pu ajouter un job dédié au déploiement d'une version taguée en production. Voici un exemple de configuration possible :
-
-   ```yaml
-   jobs:
-     rollback:
-       runs-on: ubuntu-latest
-       steps:
-         - name: Deploy Tagged Version
-           run: |
-             docker pull vote-api:v1.0.0
-             docker run -d -p 8080:8080 vote-api:v1.0.0
-   ```
-
----
-
-### Pourquoi ce Choix ?
-
-J'ai opté pour cette méthode pour les raisons suivantes :
-1. **Fiabilité :** Les images Docker taguées encapsulent tout ce qui est nécessaire pour exécuter une version spécifique de l'application, réduisant les risques liés aux dépendances ou aux configurations.
-2. **Simplicité :** Cette méthode est simple à mettre en œuvre, surtout dans un environnement où Docker est déjà utilisé pour le déploiement.
-3. **Rapidité :** Revenir à une version stable avec Docker Compose ne nécessite que quelques commandes et est presque instantané.
+Cette configuration assure une gestion fluide et cohérente des versions tout en maintenant la stabilité de la branche principale.
 
 ---
 
 ## Intégration Continue avec GitHub Actions
 
 ### Fichier `test.yml`
->>>>>>> Stashed changes
 
 ```yaml
-version: '3.8'
+name: CI Pipeline
 
-services:
-  api:
-    build: ./vote-api
-    ports:
-      - "8080:8080"
-    environment:
-      - PG_URL=postgres://vote_user:password123@db:5432/vote_db?sslmode=disable
-      - JSON_LOG=true
-    depends_on:
-      db:
-        condition: service_healthy
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature/*
+  pull_request:
+    branches:
+      - main
+      - develop
+      - feature/*
 
-  web-client: 
-    build: 
-      context: ./web-client
-    ports:
-      - "3000:3000"
-    environment:
-      - VOTE_API_BASE_URL=http://api:8080
-    depends_on:
-      - api
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U user -d testdb"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
-  docs:
-    build:
-      context: ./docs
-    ports:
-      - "4000:80"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=vote_user
-      - POSTGRES_PASSWORD=password123
-      - POSTGRES_DB=vote_db
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vote_user -d vote_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21
 
-volumes:
-  postgres_data:
-```
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in {1..10}; do
+            nc -z localhost 5432 && echo "Postgres is ready" && exit 0
+            echo "Waiting for Postgres..."
+            sleep 3
+          done
+          echo "Postgres failed to start" && exit 1
 
-### Explications
+      - name: Set environment variables
+        env:
+          PG_URL: ${{ secrets.PG_URL }}
+        run: echo "PG_URL=${{ secrets.PG_URL }}" >> $GITHUB_ENV
 
-1. **Service `api`** :
-   - Construit à partir du Dockerfile dans `vote-api`.
-   - Exposé sur le port `8080`.
-   - Connecté à PostgreSQL via la variable d'environnement `PG_URL`.
-   - Dépend de la base de données (`db`) et attend qu'elle soit prête avant de démarrer grâce à `depends_on`.
+      - name: Install dependencies (vote-api)
+        working-directory: vote-api
+        run: go mod tidy
 
-2. **Service `web-client`** :
-   - Construit à partir du Dockerfile dans `web-client`.
-   - Exposé sur le port `3000`.
-   - Communique avec l'API via la variable `VOTE_API_BASE_URL`.
+      - name: Run Go tests
+        working-directory: vote-api
+        run: go test ./... -v
 
-3. **Service `docs`** :
-   - Construit à partir du Dockerfile dans `docs`.
-   - Exposé sur le port `4000` pour servir la documentation statique.
+  webclient-tests:
+    runs-on: ubuntu-latest
 
-4. **Service `db`** :
-   - Utilise l'image officielle `postgres:15-alpine`.
-   - Configuré avec des variables d'environnement pour l'utilisateur, le mot de passe et le nom de la base de données.
-   - Utilise un volume nommé `postgres_data` pour persister les données.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
----
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'yarn'
 
-## Dockerfile des Services
+      - name: Install dependencies
+        working-directory: web-client
+        run: yarn install --frozen-lockfile
 
-### Dockerfile pour `web-client`
+      - name: Install Playwright Browsers
+        working-directory: web-client
+        run: npx playwright install --with-deps
 
-```dockerfile
-# Étape 1 : Build de l'application
-FROM node:18 as builder
-WORKDIR /app
+      - name: Run WebClient Unit Tests
+        working-directory: web-client
+        run: yarn test
 
-# Copier les fichiers de configuration
-COPY package.json yarn.lock ./
-RUN yarn install
+  build-artifacts:
+    runs-on: ubuntu-latest
+    needs:
+      - webclient-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-# Copier le reste du code
-COPY . ./
-RUN yarn build
+      - name: Install dependencies and build
+        working-directory: web-client
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
 
-# Étape 2 : Image pour l'exécution
-FROM node:18-slim
-WORKDIR /app
-
-# Copier les fichiers nécessaires pour l'exécution
-COPY --from=builder /app/package.json /app/yarn.lock ./
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-
-RUN yarn install --production
-
-# Exposer le port
-EXPOSE 3000
-
-# Commande de démarrage
-CMD ["yarn", "start"]
-```
-
-### Dockerfile pour `api`
-
-```dockerfile
-FROM golang:1.23-rc-alpine
-WORKDIR /app
-RUN apk add --no-cache postgresql-client
-COPY go.mod ./
-COPY go.sum ./
-
-RUN go mod download
-COPY . .
-RUN go build -o main .
-EXPOSE 8080
-
-CMD ["./main"]
-```
-
-### Dockerfile pour `docs`
-
-```dockerfile
-# Étape 1 : Build de la documentation
-FROM node:18 as builder
-WORKDIR /app
-
-# Copier les fichiers de configuration
-COPY package.json yarn.lock ./
-
-# Installer les dépendances nécessaires
-RUN yarn install
-
-# Copier le reste du code
-COPY . ./
-
-# Construire la documentation
-RUN yarn build
-
-# Étape 2 : Image pour servir la documentation
-FROM nginx:alpine
-WORKDIR /usr/share/nginx/html
-
-# Copier la documentation générée dans l'image finale
-COPY --from=builder /app/build .
-
-# Exposer le port 80
-EXPOSE 80
-
-# Commande de démarrage
-CMD ["nginx", "-g", "daemon off;"]
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: web-client-build
+          path: web-client/.next
 ```
 
 ---
 
-<<<<<<< Updated upstream
-## Instructions pour exécuter le projet
+### Explications de la Pipeline CI
 
-1. Assurez-vous d'avoir Docker et Docker Compose installés sur votre machine.
-2. Clonez le projet :
-   ```bash
-   git clone <repository_url>
-   cd <repository_folder>
-   ```
-3. Lancez tous les services avec Docker Compose :
-   ```bash
-   docker-compose up --build
-   ```
-   Cette commande construit les images et démarre tous les services.
+#### 1. **Déclencheurs**
+La pipeline est déclenchée automatiquement sur les événements suivants :
+- **Push** : Lorsqu'un commit est poussé sur les branches `main`, `develop`, ou toute branche `feature/*`.
+- **Pull Request** : Lorsqu'une pull request est ouverte ou mise à jour sur les mêmes branches.
 
-4. Une fois démarré, accédez aux services via les ports exposés :
-   - **API** : [http://localhost:8080](http://localhost:8080)
-   - **Interface utilisateur** : [http://localhost:3000](http://localhost:3000)
-   - **Documentation** : [http://localhost:4000](http://localhost:4000)
+#### 2. **Job `build`**
+- **Objectif** : Tester l'API `vote-api` en exécutant les tests unitaires écrits en Go.
+- **Configuration** :
+  - Utilisation d'un conteneur PostgreSQL simulé comme base de données.
+  - Installation des dépendances Go.
+  - Exécution des tests avec `go test`.
 
-5. Pour arrêter les services :
-   ```bash
-   docker-compose down
-   ```
-=======
-## Résultats
+#### 3. **Job `webclient-tests`**
+- **Objectif** : Tester le client web (`web-client`) en exécutant les tests unitaires et les tests E2E.
+- **Configuration** :
+  - Installation de Node.js et des dépendances via Yarn.
+  - Installation des navigateurs nécessaires pour Playwright.
+  - Exécution des tests unitaires avec `yarn test`.
 
-### Tests Unitaires
-- Les tests unitaires valident que chaque fonctionnalité individuelle fonctionne correctement.
-
-### Tests E2E
-- Les tests E2E valident les interactions entre les différents composants pour garantir une expérience utilisateur fluide.
->>>>>>> Stashed changes
+#### 4. **Job `build-artifacts`**
+- **Objectif** : Générer les artefacts de build pour le déploiement.
+- **Configuration** :
+  - Compilation du client web avec `yarn build`.
+  - Téléchargement des artefacts pour utilisation ultérieure.
 
 ---
 
-## Conclusion
-<<<<<<< Updated upstream
-Ce projet est maintenant entièrement conteneurisé et peut être exécuté facilement avec Docker Compose. Chaque service est isolé, mais ils interagissent grâce à la configuration centralisée. Les fichiers Docker et Docker Compose simplifient la gestion des dépendances et assurent la portabilité du projet.
-```
-=======
+## Rollback
+Pour ce projet, j'ai choisi de gérer les rollbacks avec des **tags Git**. Cette méthode me permet :
+1. D'identifier rapidement une version stable.
+2. De déployer une version précédente en cas de problème, simplement en basculant vers le commit associé au tag.
+3. D'assurer un suivi clair des versions, ce qui facilite la gestion de la production.
 
-En adoptant une approche centrée sur Docker pour les rollbacks, j'ai priorisé la simplicité, la rapidité et la fiabilité. Associée à une pipeline CI robuste et à une gestion rigoureuse des branches, cette solution garantit un workflow agile, une stabilité en production, et une facilité de maintenance en cas d'incident.
->>>>>>> Stashed changes
+---
+
+## Résultats et Conclusion
+
+Cette configuration garantit une validation continue du code et une gestion efficace des branches et des versions. La robustesse de la pipeline CI et la gestion agile des branches offrent une base solide pour le développement collaboratif et le déploiement fiable.
