@@ -13,7 +13,76 @@ J'ai utilisé Docker pour créer des images pour chaque service et Docker Compos
 
 ## Configuration avec Docker Compose
 
+<<<<<<< Updated upstream
 Voici le fichier `docker-compose.yml` utilisé pour orchestrer les services :
+=======
+Je travaille avec la méthode agile, ce qui implique une organisation stricte des branches pour faciliter le développement collaboratif :
+- **Branche `main`** : Contient la version stable de l'application, prête à être déployée en production.
+- **Branche `develop`** : Utilisée pour regrouper toutes les fonctionnalités en cours de développement avant leur validation finale.
+- **Branches `feature/*`** : Créées à partir de `develop` pour chaque nouvelle fonctionnalité ou tâche. Une fois le travail terminé, elles sont fusionnées dans `develop`.
+- **Hotfixes** : Les corrections urgentes (`hotfix`) sont créées directement depuis `main` pour résoudre des bugs critiques en production.
+
+Ce workflow permet une gestion fluide et cohérente des versions tout en maintenant la stabilité de la branche principale.
+
+---
+
+## Rollbacks
+
+Pour mon projet, j'ai choisi une approche basée sur les **tags Docker** pour effectuer des rollbacks. Cette méthode présente plusieurs avantages dans le cadre d'un projet conteneurisé et déployé via Docker Compose :
+- Les images Docker taguées permettent de revenir rapidement à une version stable et validée.
+- Les tags facilitent la gestion des versions en production, surtout en cas de problème critique.
+
+### Méthode Utilisée : Rollback avec un Tag Docker
+
+1. **Création d'un Tag lors d'une Version Stable :**
+   À chaque version validée, je crée un tag Docker correspondant, par exemple `v1.0.0`. Cela garantit que je peux toujours revenir à cette version en cas de problème avec les déploiements futurs.
+
+   ```bash
+   docker tag vote-api:latest vote-api:v1.0.0
+   docker push vote-api:v1.0.0
+   ```
+
+2. **Rollback en Cas de Problème :**
+   Si une nouvelle version introduit un bug critique, je peux effectuer un rollback en utilisant directement l'image Docker taguée.
+
+   Exemple avec Docker Compose :
+   ```bash
+   docker-compose down
+   docker-compose pull vote-api:v1.0.0
+   docker-compose up -d vote-api
+   ```
+
+   Cette méthode remet instantanément en ligne la version stable précédemment taguée sans avoir à reconstruire l'image ou à modifier le code source.
+
+3. **Automatisation dans le Pipeline CI/CD :**
+   Dans le cadre d'une intégration continue, j'aurais pu ajouter un job dédié au déploiement d'une version taguée en production. Voici un exemple de configuration possible :
+
+   ```yaml
+   jobs:
+     rollback:
+       runs-on: ubuntu-latest
+       steps:
+         - name: Deploy Tagged Version
+           run: |
+             docker pull vote-api:v1.0.0
+             docker run -d -p 8080:8080 vote-api:v1.0.0
+   ```
+
+---
+
+### Pourquoi ce Choix ?
+
+J'ai opté pour cette méthode pour les raisons suivantes :
+1. **Fiabilité :** Les images Docker taguées encapsulent tout ce qui est nécessaire pour exécuter une version spécifique de l'application, réduisant les risques liés aux dépendances ou aux configurations.
+2. **Simplicité :** Cette méthode est simple à mettre en œuvre, surtout dans un environnement où Docker est déjà utilisé pour le déploiement.
+3. **Rapidité :** Revenir à une version stable avec Docker Compose ne nécessite que quelques commandes et est presque instantané.
+
+---
+
+## Intégration Continue avec GitHub Actions
+
+### Fichier `test.yml`
+>>>>>>> Stashed changes
 
 ```yaml
 version: '3.8'
@@ -177,6 +246,7 @@ CMD ["nginx", "-g", "daemon off;"]
 
 ---
 
+<<<<<<< Updated upstream
 ## Instructions pour exécuter le projet
 
 1. Assurez-vous d'avoir Docker et Docker Compose installés sur votre machine.
@@ -200,9 +270,23 @@ CMD ["nginx", "-g", "daemon off;"]
    ```bash
    docker-compose down
    ```
+=======
+## Résultats
+
+### Tests Unitaires
+- Les tests unitaires valident que chaque fonctionnalité individuelle fonctionne correctement.
+
+### Tests E2E
+- Les tests E2E valident les interactions entre les différents composants pour garantir une expérience utilisateur fluide.
+>>>>>>> Stashed changes
 
 ---
 
 ## Conclusion
+<<<<<<< Updated upstream
 Ce projet est maintenant entièrement conteneurisé et peut être exécuté facilement avec Docker Compose. Chaque service est isolé, mais ils interagissent grâce à la configuration centralisée. Les fichiers Docker et Docker Compose simplifient la gestion des dépendances et assurent la portabilité du projet.
 ```
+=======
+
+En adoptant une approche centrée sur Docker pour les rollbacks, j'ai priorisé la simplicité, la rapidité et la fiabilité. Associée à une pipeline CI robuste et à une gestion rigoureuse des branches, cette solution garantit un workflow agile, une stabilité en production, et une facilité de maintenance en cas d'incident.
+>>>>>>> Stashed changes
