@@ -9,6 +9,8 @@ Dans ce projet, j'ai configuré et déployé une application multi-services comp
 
 J'ai utilisé Docker pour conteneuriser chaque service, Docker Compose pour orchestrer leur déploiement, et une pipeline d'intégration continue (CI) pour automatiser les tests et la validation du code.
 
+Enfin, j'ai tenté de déployer le projet sur Google Cloud Platform (GCP), mais je n'ai pas pu finaliser cette étape en raison de contraintes de temps et de difficultés techniques rencontrées dans la configuration.
+
 ---
 
 ## Méthode de Développement Agile et Gestion des Branches
@@ -89,6 +91,22 @@ push-docker-images:
 
 ---
 
+## Tentative de Déploiement sur GCP
+
+J'ai configuré Google Cloud Platform pour déployer les services via **Cloud Run** et **Artifact Registry** :
+1. J'ai créé un dépôt Docker sur Artifact Registry pour héberger mes images Docker.
+2. J'ai tenté de déployer les images via Cloud Run, en passant les variables d'environnement nécessaires, notamment `PG_URL` pour connecter l'API à la base de données PostgreSQL.
+
+### Problèmes rencontrés :
+- **Connexion à PostgreSQL** : Le conteneur `vote-api` n'a pas pu établir une connexion avec la base de données, probablement en raison d'une configuration incorrecte ou de restrictions réseau.
+- **Timeout des services** : Cloud Run a signalé que le conteneur ne répondait pas sur le port attendu dans le délai imparti.
+
+En raison du manque de temps, je n'ai pas pu résoudre ces problèmes, mais j'ai identifié des pistes pour les prochaines étapes :
+- Utiliser Google Cloud SQL pour gérer la base de données.
+- Vérifier la configuration réseau pour autoriser Cloud Run à accéder à la base de données.
+
+---
+
 ## Documentation pour Utilisateurs et Contributeurs
 
 ### Documentation Utilisateur
@@ -145,4 +163,4 @@ Pour ce projet, j'ai choisi de gérer les rollbacks avec des **tags Git**. Cette
 
 ## Résultats et Conclusion
 
-Cette configuration garantit une validation continue du code et une gestion efficace des branches et des versions. La robustesse de la pipeline CI, la gestion agile des branches, et l'automatisation des déploiements avec Docker offrent une base solide pour le développement collaboratif et le déploiement fiable.
+Bien que je n'aie pas pu finaliser le déploiement sur GCP, ce projet a permis de mettre en place une infrastructure complète pour le développement, les tests, et le déploiement d'une application multi-services. Les étapes suivantes incluraient la résolution des problèmes liés à la connexion PostgreSQL et l'optimisation du déploiement Cloud Run.
