@@ -28,159 +28,121 @@ Cette configuration assure une gestion fluide et cohérente des versions tout en
 
 ---
 
-## Intégration Continue avec GitHub Actions
+## Déploiement des Images Docker
 
-### Fichier `test.yml`
+### Construction et Push des Images Docker
+J'ai conteneurisé chaque service en utilisant Docker et j'ai publié les images sur Docker Hub pour faciliter leur déploiement. Voici les étapes effectuées :
+
+1. **Construction des Images** :
+   J'ai utilisé les commandes suivantes pour construire les images Docker :
+   ```bash
+   docker build -t mehditrr/vote-api:latest ./vote-api
+   docker build -t mehditrr/web-client:latest ./web-client
+   docker build -t mehditrr/docs:latest ./docs
+   ```
+
+2. **Publication des Images sur Docker Hub** :
+   Les images construites ont été poussées sur Docker Hub à l'aide de ces commandes :
+   ```bash
+   docker push mehditrr/vote-api:latest
+   docker push mehditrr/web-client:latest
+   docker push mehditrr/docs:latest
+   ```
+
+3. **Liens des Images Docker** :
+   - [vote-api](https://hub.docker.com/repository/docker/mehditrr/vote-api/general)
+   - [web-client](https://hub.docker.com/repository/docker/mehditrr/web-client/general)
+   - [docs](https://hub.docker.com/repository/docker/mehditrr/docs/general)
+
+### Intégration dans la Pipeline CI
+Pour automatiser le processus de build et de push des images Docker, j'ai ajouté un job `push-docker-images` dans la pipeline CI. Ce job est exécuté après la validation des tests et le build des artefacts :
 
 ```yaml
-name: CI Pipeline
+push-docker-images:
+  runs-on: ubuntu-latest
+  needs: build-artifacts
+  steps:
+    - name: Check out code
+      uses: actions/checkout@v3
 
-on:
-  push:
-    branches:
-      - main
-      - develop
-      - feature/*
-  pull_request:
-    branches:
-      - main
-      - develop
-      - feature/*
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:13
-        env:
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: testdb
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U user -d testdb"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
+    - name: Push vote-api image
+      run: |
+        docker build -t mehditrr/vote-api:latest ./vote-api
+        docker push mehditrr/vote-api:latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Push web-client image
+      run: |
+        docker build -t mehditrr/web-client:latest ./web-client
+        docker push mehditrr/web-client:latest
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.21
-
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          for i in {1..10}; do
-            nc -z localhost 5432 && echo "Postgres is ready" && exit 0
-            echo "Waiting for Postgres..."
-            sleep 3
-          done
-          echo "Postgres failed to start" && exit 1
-
-      - name: Set environment variables
-        env:
-          PG_URL: ${{ secrets.PG_URL }}
-        run: echo "PG_URL=${{ secrets.PG_URL }}" >> $GITHUB_ENV
-
-      - name: Install dependencies (vote-api)
-        working-directory: vote-api
-        run: go mod tidy
-
-      - name: Run Go tests
-        working-directory: vote-api
-        run: go test ./... -v
-
-  webclient-tests:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          cache: 'yarn'
-
-      - name: Install dependencies
-        working-directory: web-client
-        run: yarn install --frozen-lockfile
-
-      - name: Install Playwright Browsers
-        working-directory: web-client
-        run: npx playwright install --with-deps
-
-      - name: Run WebClient Unit Tests
-        working-directory: web-client
-        run: yarn test
-
-  build-artifacts:
-    runs-on: ubuntu-latest
-    needs:
-      - webclient-tests
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install dependencies and build
-        working-directory: web-client
-        run: |
-          yarn install --frozen-lockfile
-          yarn build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: web-client-build
-          path: web-client/.next
+    - name: Push docs image
+      run: |
+        docker build -t mehditrr/docs:latest ./docs
+        docker push mehditrr/docs:latest
 ```
 
 ---
 
-### Explications de la Pipeline CI
+## Documentation pour Utilisateurs et Contributeurs
 
-#### 1. **Déclencheurs**
-La pipeline est déclenchée automatiquement sur les événements suivants :
-- **Push** : Lorsqu'un commit est poussé sur les branches `main`, `develop`, ou toute branche `feature/*`.
-- **Pull Request** : Lorsqu'une pull request est ouverte ou mise à jour sur les mêmes branches.
+### Documentation Utilisateur
+Pour exécuter l'application localement :
+1. Installez Docker et Docker Compose.
+2. Clonez le dépôt :
+   ```bash
+   git clone <repository_url>
+   cd <repository_folder>
+   ```
+3. Lancez tous les services avec Docker Compose :
+   ```bash
+   docker-compose up --build
+   ```
+4. Accédez aux services :
+   - **API** : [http://localhost:8080](http://localhost:8080)
+   - **Web Client** : [http://localhost:3000](http://localhost:3000)
+   - **Documentation** : [http://localhost:4000](http://localhost:4000)
 
-#### 2. **Job `build`**
-- **Objectif** : Tester l'API `vote-api` en exécutant les tests unitaires écrits en Go.
-- **Configuration** :
-  - Utilisation d'un conteneur PostgreSQL simulé comme base de données.
-  - Installation des dépendances Go.
-  - Exécution des tests avec `go test`.
-
-#### 3. **Job `webclient-tests`**
-- **Objectif** : Tester le client web (`web-client`) en exécutant les tests unitaires et les tests E2E.
-- **Configuration** :
-  - Installation de Node.js et des dépendances via Yarn.
-  - Installation des navigateurs nécessaires pour Playwright.
-  - Exécution des tests unitaires avec `yarn test`.
-
-#### 4. **Job `build-artifacts`**
-- **Objectif** : Générer les artefacts de build pour le déploiement.
-- **Configuration** :
-  - Compilation du client web avec `yarn build`.
-  - Téléchargement des artefacts pour utilisation ultérieure.
+### Documentation Contributeur
+1. Clonez le projet :
+   ```bash
+   git clone <repository_url>
+   cd <repository_folder>
+   ```
+2. Créez une branche pour vos changements :
+   ```bash
+   git checkout -b feature/<feature_name>
+   ```
+3. Respectez la convention de commit [Gitmoji](https://gitmoji.dev) pour documenter vos changements.
+4. Testez localement :
+   - Exécutez les tests unitaires :
+     ```bash
+     yarn test
+     ```
+   - Exécutez les tests E2E :
+     ```bash
+     yarn e2e
+     ```
+5. Ouvrez une Pull Request vers `develop` :
+   - La PR doit inclure une description détaillée de vos changements.
+   - Assurez-vous que les tests CI passent avant la fusion.
+6. Après approbation, fusionnez votre PR.
 
 ---
 
 ## Rollback
-Pour ce projet, j'ai choisi de gérer les rollbacks avec des **tags Git**. Cette méthode me permet :
+Pour ce projet, j'ai choisi de gérer les rollbacks avec des **tags Git**. Cette méthode me permet :
 1. D'identifier rapidement une version stable.
-2. De déployer une version précédente en cas de problème, simplement en basculant vers le commit associé au tag.
-3. D'assurer un suivi clair des versions, ce qui facilite la gestion de la production.
+2. De déployer une version précédente en cas de problème.
+3. D'assurer un suivi clair des versions.
 
 ---
 
 ## Résultats et Conclusion
 
-Cette configuration garantit une validation continue du code et une gestion efficace des branches et des versions. La robustesse de la pipeline CI et la gestion agile des branches offrent une base solide pour le développement collaboratif et le déploiement fiable.
+Cette configuration garantit une validation continue du code et une gestion efficace des branches et des versions. La robustesse de la pipeline CI, la gestion agile des branches, et l'automatisation des déploiements avec Docker offrent une base solide pour le développement collaboratif et le déploiement fiable.
